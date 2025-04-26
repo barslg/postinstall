@@ -1,5 +1,7 @@
 #!/bin/bash
 # postinstall.sh — Ubuntu 22.04.5 LTS server setup automation
+# This script is designed to automate the post-installation setup of an Ubuntu server.
+# It includes tasks such as updating the system, installing essential packages, configuring services,
 
 # set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
