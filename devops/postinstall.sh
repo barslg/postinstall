@@ -226,6 +226,15 @@ echo '/home/vdsadmin/logs/*.log /home/vdsadmin/logs/errors/*.log {
 }' > /etc/logrotate.d/vdsadmin
 
 log "Finalizing setup..."
+
+mkdir /root/scripts/
+wget https://raw.githubusercontent.com/barslg/postinstall/refs/heads/main/devops/addDomain.sh -O /root/scripts/addDomain.sh -o /dev/null
+if [[ -f /root/scripts/addDomain.sh ]]; then
+  chmod +x /root/scripts/addDomain.sh
+else
+  log "/root/scripts/addDomain.sh not found, skipping chmod."
+fi
+
 systemctl reload nginx || log "nginx reload failed"
 systemctl reload php$PHP_VERSION-fpm || log "PHP-FPM reload failed"
 systemctl reload mysql || log "MySQL reload failed"
