@@ -1,126 +1,153 @@
 #!/bin/bash
-# postinstall.sh — automation of Ubuntu 22.04.5 LTS server deployment
+# postinstall.sh — Ubuntu 22.04.5 LTS server setup automation
 
-set -euo pipefail
+# set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 LOG_FILE="/var/log/postinstall.log"
+ALL_SETTINGS_FILE="/home/vdsadmin/.all_settings"
+
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') — $1"
 }
-
-log "Starting postinstall setup on $(hostname)"
-
-### 1. System update ###
-log "Updating the system..."
-apt update && apt upgrade -y && apt dist-upgrade -y && apt autoremove -y
-
-### 2. Installing basic packages ###
-UTILS=(mc joe rpl net-tools curl jc whois wget rsync certbot git gnupg2 software-properties-common ufw)
-for pkg in "${UTILS[@]}"; do
-  if ! dpkg -s $pkg >/dev/null 2>&1; then
+pkg_install() {
+  local pkg="$1"
+  if ! dpkg -s "$pkg" >/dev/null 2>&1; then
     log "Installing $pkg..."
-    apt install -y "$pkg"
+    apt install -y "$pkg" || apt install -y "$pkg" --fix-missing
+  else
+    log "$pkg is already installed."
   fi
+}
+
+log "Postinstall started on $(hostname)"
+log "Script executed by user: $(whoami)"
+log "OS: $(lsb_release -d | cut -f2)"
+
+### 1. Update and upgrade system ###
+log "Updating system packages..."
+apt update --fix-missing
+apt upgrade -y || apt upgrade -y --fix-missing
+apt dist-upgrade -y || true
+apt autoremove -y || true
+
+### 2. Install essential packages ###
+ESSENTIAL_PACKAGES=(mc joe rpl net-tools curl jc whois wget rsync certbot git gnupg2 software-properties-common ufw apache2-utils)
+for pkg in "${ESSENTIAL_PACKAGES[@]}"; do
+  pkg_install "$pkg"
 done
 
-### 3. Installing PHP and detecting version ###
+### 3. Install PHP base and detect version ###
 log "Installing base PHP..."
-apt install -y php
+apt install -y php-cli || apt install -y php-cli --fix-missing
 PHP_VERSION=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
 log "Detected PHP version: $PHP_VERSION"
 
-### 4. Installing additional PHP modules and other software ###
-log "Installing PHP $PHP_VERSION, nginx, MySQL, memcached..."
-PHP_PACKAGES=(php$PHP_VERSION php$PHP_VERSION-fpm php$PHP_VERSION-cli php$PHP_VERSION-common php$PHP_VERSION-mysql php$PHP_VERSION-zip php$PHP_VERSION-mbstring php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-opcache php-ssh2 php-memcache php-memcached)
-apt install -y nginx mysql-server mysql-client memcached "${PHP_PACKAGES[@]}"
+### 4. Install PHP modules, Nginx, MySQL, Memcached ###
+log "Installing PHP modules and services..."
+PHP_PACKAGES=(fpm common mysql zip mbstring curl xml opcache ssh2 memcache memcached)
+for pkg in "${PHP_PACKAGES[@]}"; do
+  pkg_install "php-${pkg}"
+done
+OTHER_PACKAGES=(nginx-full mysql-server mysql-client memcached)
+for pkg in "${OTHER_PACKAGES[@]}"; do
+  pkg_install "$pkg"
+done
 
-### 5. Creating user vdsadmin ###
+
+### 5. Create user vdsadmin if not exists ###
 log "Creating user vdsadmin..."
-useradd -m -s /bin/bash vdsadmin || log "User already exists"
+id -u vdsadmin &>/dev/null || useradd -m -s /bin/bash vdsadmin
 mkdir -p /home/vdsadmin/.ssh
-cp /home/ubuntu/.ssh/authorized_keys /home/vdsadmin/.ssh/ || true
+cat /home/ubuntu/.ssh/authorized_keys > /home/vdsadmin/.ssh/authorized_keys || true
 chmod 700 /home/vdsadmin/.ssh
 chmod 600 /home/vdsadmin/.ssh/authorized_keys || true
 chown -R vdsadmin:vdsadmin /home/vdsadmin/.ssh
 usermod -aG sudo vdsadmin
-deluser --remove-home ubuntu || true
+echo "vdsadmin ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/vdsadmin
 
-### 6. Creating directories ###
+### 6. Create directories ###
 mkdir -p /home/vdsadmin/www /home/vdsadmin/logs/errors /home/vdsadmin/certs /home/vdsadmin/github_keys
 chown -R vdsadmin:vdsadmin /home/vdsadmin
 chmod 755 /home/vdsadmin/www /home/vdsadmin/logs /home/vdsadmin/github_keys
 
-### 7. Alias s=sudo su ###
+### 7. Add sudo alias ###
 echo "alias s='sudo su'" >> /home/vdsadmin/.bashrc
 
-### 8. Installing ionCube Loader ###
-log "Installing ionCube..."
+### 8. Install ionCube Loader ###
+log "Installing ionCube Loader..."
 wget -qO /tmp/ioncube.tar.gz https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_x86-64.tar.gz
-mkdir -p /opt/ioncube && tar -xzf /tmp/ioncube.tar.gz -C /opt/ioncube
+mkdir -p /opt/ioncube && tar -xzf /tmp/ioncube.tar.gz -C /opt/ioncube --strip-components=1
 PHP_EXT_DIR=$(php -i | grep extension_dir | awk '{print $NF}')
-if [ ! -f "$PHP_EXT_DIR/ioncube_loader_lin_${PHP_VERSION}.so" ]; then
-  SHORT_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
-  cp "/opt/ioncube/ioncube_loader_lin_${SHORT_VER}.so" "$PHP_EXT_DIR"
+LOADER_FILE="/opt/ioncube/ioncube_loader_lin_${PHP_VERSION}.so"
+if [[ ! -f "$LOADER_FILE" ]]; then
+  log "ionCube loader for PHP $PHP_VERSION not found, falling back to ioncube_loader_lin_8.1.so"
+  LOADER_FILE="/opt/ioncube/ioncube_loader_lin_8.1.so"
 fi
-echo "zend_extension=$PHP_EXT_DIR/ioncube_loader_lin_${PHP_VERSION}.so" > "/etc/php/$PHP_VERSION/fpm/conf.d/00-ioncube.ini"
-echo "zend_extension=$PHP_EXT_DIR/ioncube_loader_lin_${PHP_VERSION}.so" > "/etc/php/$PHP_VERSION/cli/conf.d/00-ioncube.ini"
-systemctl enable php$PHP_VERSION-fpm && systemctl start php$PHP_VERSION-fpm
+cp "$LOADER_FILE" "$PHP_EXT_DIR"
+echo "zend_extension=$PHP_EXT_DIR/$(basename "$LOADER_FILE")" > "/etc/php/$PHP_VERSION/fpm/conf.d/00-ioncube.ini"
+echo "zend_extension=$PHP_EXT_DIR/$(basename "$LOADER_FILE")" > "/etc/php/$PHP_VERSION/cli/conf.d/00-ioncube.ini"
+systemctl enable php$PHP_VERSION-fpm && systemctl restart php$PHP_VERSION-fpm
 
-### 9. Configuring nginx ###
+### 9. Nginx configuration ###
 log "Configuring nginx..."
 mkdir -p /etc/nginx/vhosts
-cat << EOF > /etc/nginx/proxy.conf
-location ~ \.php\$ {
-    include snippets/fastcgi-php.conf;
-    fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
+
+echo 'location ~ \.php$ {
+  include snippets/fastcgi-php.conf;
+  fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
 }
 location ~ /.well-known/acme-challenge/ {
-    root /home/vdsadmin/certs;
-    allow all;
+  root /home/vdsadmin/certs;
+  allow all;
 }
 location /myadmin {
-    auth_basic "Restricted";
-    auth_basic_user_file /home/vdsadmin/.htpasswd;
-    root /var/www/html/myadmin;
-    index index.php index.html;
-    include snippets/fastcgi-php.conf;
-    fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
-    fastcgi_param SCRIPT_FILENAME /var/www/html/myadmin\$fastcgi_script_name;
+  auth_basic "Restricted";
+  auth_basic_user_file /home/vdsadmin/.htpasswd;
+  root /var/www/html/myadmin;
+  index index.php index.html;
+  include snippets/fastcgi-php.conf;
+  fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
+  fastcgi_param SCRIPT_FILENAME /var/www/html/myadmin\$fastcgi_script_name;
 }
 error_page 404 /404.html;
-EOF
+' > /etc/nginx/proxy.conf
 
-cat << EOF > /etc/nginx/proxy_laravel.conf
-include /etc/nginx/proxy.conf;
+echo 'include /etc/nginx/proxy.conf;
 location / {
-    try_files \$uri \$uri/ /index.php?\$query_string;
+  try_files \$uri \$uri/ /index.php?\$query_string;
 }
-EOF
+' > /etc/nginx/proxy_laravel.conf
 
-systemctl enable nginx && systemctl start nginx
+# Generate .htpasswd user
+HTPASSWD_USER="admin"
+HTPASSWD_PASS=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c12)
+echo "Nginx htaccess: $HTPASSWD_USER $HTPASSWD_PASS" >> $ALL_SETTINGS_FILE
+htpasswd -bc /home/vdsadmin/.htpasswd "$HTPASSWD_USER" "$HTPASSWD_PASS"
+chmod 600 /home/vdsadmin/.htpasswd
+chown vdsadmin:vdsadmin /home/vdsadmin/.htpasswd
 
-### 10. Configuring MySQL ###
-log "Configuring MySQL..."
-systemctl start mysql
-MEMORY=$(free -m | awk '/^Mem:/{print $2}')
+systemctl enable nginx && systemctl restart nginx
+
+### 10. MySQL secure root ###
+log "Securing MySQL root user..."
+systemctl restart mysql
 PASS=$(< /dev/urandom tr -dc A-Za-z0-9! | head -c12)
-echo "$PASS" >> /home/vdsadmin/.all_settings
-chmod 600 /home/vdsadmin/.all_settings
-chown vdsadmin:vdsadmin /home/vdsadmin/.all_settings
+echo "MySQL pass: $PASS" >> $ALL_SETTINGS_FILE
+chmod 600 $ALL_SETTINGS_FILE
+chown vdsadmin:vdsadmin $ALL_SETTINGS_FILE
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$PASS'; FLUSH PRIVILEGES;"
 
-### 11. Installing phpMyAdmin ###
+### 11. phpMyAdmin install ###
 log "Installing phpMyAdmin..."
 wget -qO /tmp/phpmyadmin.tar.gz https://files.phpmyadmin.net/phpMyAdmin/latest/phpMyAdmin-latest-all-languages.tar.gz
 tar -xzf /tmp/phpmyadmin.tar.gz -C /var/www/html/
-PMA_DIR=$(find /var/www/html -maxdepth 1 -type d -name "phpMyAdmin*")
-mv "$PMA_DIR" /var/www/html/myadmin
+mv /var/www/html/phpMyAdmin* /var/www/html/myadmin
 chown -R www-data:www-data /var/www/html/myadmin
 
-### 12. SSH, SFTP, Firewall ###
-log "Configuring SSH and SFTP..."
+### 12. SSH, Firewall ###
+log "Configuring SSH, UFW and MySQL bind..."
 ufw allow OpenSSH
 ufw --force enable
 sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf
@@ -128,19 +155,16 @@ systemctl restart mysql
 
 ### 13. Rsync and Memcached ###
 systemctl enable memcached
-systemctl start memcached
+systemctl restart memcached
 
 ### 14. Fail2ban ###
 log "Installing and configuring fail2ban..."
 apt install -y fail2ban
-cat << EOF > /etc/fail2ban/filter.d/nginx-404.conf
-[Definition]
+echo '[Definition]
 failregex = ^<HOST> -.*"(GET|POST).*(404)"
-ignoreregex =
-EOF
+ignoreregex =' > /etc/fail2ban/filter.d/nginx-404.conf
 
-cat << EOF > /etc/fail2ban/jail.d/custom.conf
-[sshd]
+echo '[sshd]
 enabled = true
 maxretry = 5
 bantime = 600
@@ -151,30 +175,29 @@ enabled = true
 port = http,https
 filter = nginx-404
 logpath = /var/log/nginx/access.log
-maxretry = 10
-EOF
+maxretry = 10' > /etc/fail2ban/jail.d/custom.conf
+
 systemctl enable fail2ban
 systemctl restart fail2ban
 
-### 15. Log rotation ###
-cat <<EOF > /etc/logrotate.d/vdsadmin
-/home/vdsadmin/logs/*.log /home/vdsadmin/logs/errors/*.log {
-    daily
-    rotate 14
-    compress
-    missingok
-    notifempty
-    create 640 vdsadmin adm
-    sharedscripts
-    postrotate
-        systemctl reload nginx >/dev/null 2>&1 || true
-    endscript
-}
-EOF
+### 15. Logrotate config ###
+log "Setting up log rotation..."
+echo '/home/vdsadmin/logs/*.log /home/vdsadmin/logs/errors/*.log {
+  daily
+  rotate 14
+  compress
+  missingok
+  notifempty
+  create 640 vdsadmin adm
+  sharedscripts
+  postrotate
+    systemctl reload nginx >/dev/null 2>&1 || true
+  endscript
+}' > /etc/logrotate.d/vdsadmin
 
-log "Completed successfully."
-systemctl reload nginx || log "Failed to reload nginx"
-systemctl reload php$PHP_VERSION-fpm || log "Failed to reload php$PHP_VERSION-fpm"
-systemctl reload mysql || log "Failed to reload mysql"
-log "Postinstall completed."
+log "Finalizing setup..."
+systemctl restart nginx || log "nginx reload failed"
+systemctl restart php$PHP_VERSION-fpm || log "PHP-FPM reload failed"
+systemctl restart mysql || log "MySQL reload failed"
+log "Postinstall complete."
 exit 0
