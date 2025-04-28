@@ -69,7 +69,7 @@ echo "server {
     root $WEB_ROOT;
     index index.php index.html index.htm;
 
-    access_log $LOG_ROOT/$DOMAIN.access.log main;
+    access_log $LOG_ROOT/$DOMAIN.access.log;
     error_log $LOG_ROOT/errors/$DOMAIN.error.log;
 
     include /etc/nginx/proxy.conf;

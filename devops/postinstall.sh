@@ -141,12 +141,11 @@ location / {
 
 
 {
-  echo -e "#Cloudflare - IPv4\n"
+  echo -e "##### Cloudflare - IPv4\n"
   curl -s -L https://www.cloudflare.com/ips-v4 | awk '{print "set_real_ip_from " $0 ";"}'
-  echo -e "\n# - IPv6\n"
+  echo -e "\n##### Cloudflare - IPv6\n"
   curl -s -L https://www.cloudflare.com/ips-v6 | awk '{print "set_real_ip_from " $0 ";"}'
-  echo ""
-  echo "real_ip_header CF-Connecting-IP;"
+  echo -e "\nreal_ip_header CF-Connecting-IP;"
 } > "$CLOUDFLARE_FILE_PATH"
 
 
