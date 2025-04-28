@@ -37,7 +37,7 @@ apt dist-upgrade -y || true
 apt autoremove -y || true
 
 ### 2. Install essential packages ###
-ESSENTIAL_PACKAGES=(mc joe rpl net-tools curl jc whois wget rsync certbot git gnupg2 software-properties-common ufw)
+ESSENTIAL_PACKAGES=(mc joe rpl net-tools curl jc whois wget rsync certbot git gnupg2 software-properties-common ufw fail2ban)
 for pkg in "${ESSENTIAL_PACKAGES[@]}"; do
   pkg_install "$pkg"
 done
@@ -113,9 +113,9 @@ systemctl enable php$PHP_VERSION-fpm && systemctl restart php$PHP_VERSION-fpm
 ### 9. Nginx configuration ###
 log "Configuring nginx..."
 
-echo 'location ~ \.php\$ {
+echo 'location ~ \.php$ {
   include snippets/fastcgi-php.conf;
-  fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
+  fastcgi_pass unix:/run/php/php'.$PHP_VERSION.'-fpm.sock;
 }
 location ~ /.well-known/acme-challenge/ {
   root /home/vdsadmin/certs;
@@ -127,15 +127,15 @@ location /myadmin {
   root /var/www/html/myadmin;
   index index.php index.html;
   include snippets/fastcgi-php.conf;
-  fastcgi_pass unix:/run/php/php$PHP_VERSION-fpm.sock;
-  fastcgi_param SCRIPT_FILENAME /var/www/html/myadmin\$fastcgi_script_name;
+  fastcgi_pass unix:/run/php/php'.$PHP_VERSION.'-fpm.sock;
+  fastcgi_param SCRIPT_FILENAME /var/www/html/myadmin/$fastcgi_script_name;
 }
 error_page 404 /404.html;
 ' > /etc/nginx/proxy.conf
 
 echo 'include /etc/nginx/proxy.conf;
 location / {
-  try_files \$uri \$uri/ /index.php?\$query_string;
+  try_files $uri $uri/ /index.php?$query_string;
 }
 ' > /etc/nginx/proxy_laravel.conf
 
@@ -189,7 +189,6 @@ systemctl restart memcached
 
 ### 14. Fail2ban ###
 log "Installing and configuring fail2ban..."
-apt install -y fail2ban
 echo '[Definition]
 failregex = ^<HOST> -.*"(GET|POST).*(404)"
 ignoreregex =' > /etc/fail2ban/filter.d/nginx-404.conf
