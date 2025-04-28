@@ -102,8 +102,8 @@ mkdir -p /opt/ioncube && tar -xzf /tmp/ioncube.tar.gz -C /opt/ioncube --strip-co
 PHP_EXT_DIR=$(php -i | grep extension_dir | awk '{print $NF}')
 LOADER_FILE="/opt/ioncube/ioncube_loader_lin_${PHP_VERSION}.so"
 if [[ ! -f "$LOADER_FILE" ]]; then
-  log "ionCube loader for PHP $PHP_VERSION not found, falling back to ioncube_loader_lin_8.1.so"
-  LOADER_FILE="/opt/ioncube/ioncube_loader_lin_8.1.so"
+  log "ionCube loader for PHP $PHP_VERSION not found, falling back to ioncube_loader_lin_${PHP_VERSION}.so"
+  LOADER_FILE="/opt/ioncube/ioncube_loader_lin_${PHP_VERSION}.so"
 fi
 cp "$LOADER_FILE" "$PHP_EXT_DIR"
 echo "zend_extension=$PHP_EXT_DIR/$(basename "$LOADER_FILE")" > "/etc/php/$PHP_VERSION/fpm/conf.d/00-ioncube.ini"
