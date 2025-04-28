@@ -111,7 +111,7 @@ $CERTBOT_BIN --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL"
 
 # Step 8: Reload Nginx after SSL setup
 log "Reloading Nginx to apply SSL configuration"
-systemctl reload nginx
+systemctl restart nginx
 
 # Step 9: Validate HTTPS access
 log "Validating HTTPS access to the test file"

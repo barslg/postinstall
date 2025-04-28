@@ -37,7 +37,7 @@ apt dist-upgrade -y || true
 apt autoremove -y || true
 
 ### 2. Install essential packages ###
-ESSENTIAL_PACKAGES=(mc joe rpl net-tools curl jc whois wget rsync certbot git gnupg2 software-properties-common ufw fail2ban)
+ESSENTIAL_PACKAGES=(mc joe rpl net-tools curl jc whois wget rsync certbot git gnupg2 software-properties-common ufw fail2ban python3-certbot-nginx)
 for pkg in "${ESSENTIAL_PACKAGES[@]}"; do
   pkg_install "$pkg"
 done
@@ -66,6 +66,13 @@ log "Creating user vdsadmin..."
 
 # Create user if not exists
 id -u vdsadmin &>/dev/null || useradd -m -s /bin/bash vdsadmin
+if id -u www-data &>/dev/null; then
+  usermod -a -G vdsadmin www-data
+  log "www-data user added to vdsadmin group."
+else
+  log "www-data user does not exist, skipping group addition."
+fi
+
 
 # Create .ssh directory
 mkdir -p /home/vdsadmin/.ssh
@@ -158,6 +165,8 @@ chmod 600 /home/vdsadmin/.htpasswd
 chown vdsadmin:vdsadmin /home/vdsadmin/.htpasswd
 sed -i 's|include /etc/nginx/sites-enabled/\*;|include /etc/nginx/sites-enabled/*.conf;|' /etc/nginx/nginx.conf
 
+
+
 systemctl enable nginx && systemctl restart nginx
 
 ### 10. MySQL secure root ###
@@ -179,6 +188,9 @@ chown -R www-data:www-data /var/www/html/myadmin
 ### 12. SSH, Firewall ###
 log "Configuring SSH, UFW and MySQL bind..."
 ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw allow 'Nginx HTTP'
+ufw allow 'Nginx HTTPS'
 ufw --force enable
 sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf
 systemctl restart mysql
@@ -234,6 +246,9 @@ if [[ -f /root/scripts/addDomain.sh ]]; then
 else
   log "/root/scripts/addDomain.sh not found, skipping chmod."
 fi
+
+// add certbot cron job
+echo "0 0 * * * root certbot renew --quiet --post-hook 'systemctl reload nginx'" > /etc/cron.d/certbot
 
 systemctl reload nginx || log "nginx reload failed"
 systemctl reload php$PHP_VERSION-fpm || log "PHP-FPM reload failed"
