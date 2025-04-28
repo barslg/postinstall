@@ -247,7 +247,7 @@ else
   log "/root/scripts/addDomain.sh not found, skipping chmod."
 fi
 
-// add certbot cron job
+# add certbot cron job
 echo "0 0 * * * root certbot renew --quiet --post-hook 'systemctl reload nginx'" > /etc/cron.d/certbot
 
 systemctl reload nginx || log "nginx reload failed"
