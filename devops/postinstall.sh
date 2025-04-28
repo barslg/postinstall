@@ -157,6 +157,7 @@ echo "Nginx htaccess: $HTPASSWD_USER $HTPASSWD_PASS" >> $ALL_SETTINGS_FILE
 htpasswd -bc /home/vdsadmin/.htpasswd "$HTPASSWD_USER" "$HTPASSWD_PASS"
 chmod 600 /home/vdsadmin/.htpasswd
 chown vdsadmin:vdsadmin /home/vdsadmin/.htpasswd
+sed -i 's|include /etc/nginx/sites-enabled/\*;|include /etc/nginx/sites-enabled/*.conf;|' /etc/nginx/nginx.conf
 
 systemctl enable nginx && systemctl restart nginx
 
@@ -230,12 +231,13 @@ mkdir /root/scripts/
 wget https://raw.githubusercontent.com/barslg/postinstall/refs/heads/main/devops/addDomain.sh -O /root/scripts/addDomain.sh -o /dev/null
 if [[ -f /root/scripts/addDomain.sh ]]; then
   chmod +x /root/scripts/addDomain.sh
+  /root/scripts/addDomain.sh $(hostname -f) || log "addDomain.sh failed"
 else
   log "/root/scripts/addDomain.sh not found, skipping chmod."
 fi
 
 systemctl reload nginx || log "nginx reload failed"
 systemctl reload php$PHP_VERSION-fpm || log "PHP-FPM reload failed"
-systemctl reload mysql || log "MySQL reload failed"
+systemctl restart mysql || log "MySQL reload failed"
 log "Postinstall complete."
 exit 0
