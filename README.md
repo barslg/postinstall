@@ -1,64 +1,91 @@
-# Postinstall Script for Ubuntu 22.04.5 LTS Server
+# Ubuntu Server Automation Toolkit
 
-This script automates the setup and configuration of an Ubuntu 22.04.5 LTS server. It installs essential software, configures services, and prepares the server for web hosting and development tasks.
+A fully automated and production-ready bash-based toolkit for deploying and managing Ubuntu 22.04.5 LTS servers with Laravel or generic PHP projects.
 
-## Features
+## 🔧 Features
 
-1. **System Update**
-   Updates the system packages and removes unnecessary ones.
+### ✅ `postinstall.sh`
+Automates the initial configuration of a fresh Ubuntu server.
 
-2. **Basic Utilities Installation**
-   Installs essential utilities like `mc`, `curl`, `wget`, `git`, `ufw`, and more.
+- System update and cleanup
+- Installs essential software:
+  - Nginx, MySQL, PHP (auto-detected version), Memcached
+  - Composer, Curl, Git, Ioncube Loader, Fail2ban, Certbot
+- Creates `vdsadmin` user with `sudo` and secure SSH access
+- Creates standard directory structure:
+  - `/home/vdsadmin/www` — websites
+  - `/home/vdsadmin/logs` — logs
+  - `/home/vdsadmin/certs` — SSL certificates
+- Configures:
+  - MySQL memory and performance settings
+  - PHP-FPM workers based on system RAM
+  - Nginx for optimal server performance
+- Enables firewall and basic protection
+- Logs to `/var/log/postinstall.log` and `/var/log/postinstall_pkg.log`
 
-3. **PHP Installation**
-   Installs PHP and detects its version for further configuration.
+### ✅ `addDomain.sh`
+Adds a new domain with Nginx and Let's Encrypt certificate in seconds.
 
-4. **Additional Software Installation**
-   Installs Nginx, MySQL, Memcached, and additional PHP modules.
+- Creates new Nginx vhost for specified domain
+- Supports Laravel or static/PHP projects
+- Auto-detects PHP version
+- Sets up directory:
+  - `/home/vdsadmin/www/<domain>` and logs to `/home/vdsadmin/logs/<domain>`
+- Issues SSL via Certbot with HTTP challenge
+- Logs to `/var/log/adddomain.log`
 
-5. **User Management**
-   Creates a new user `vdsadmin` with sudo privileges and sets up SSH access.
+## ⚙️ Usage
 
-6. **Directory Structure**
-   Creates necessary directories for web hosting, logs, certificates, and GitHub keys.
-
-7. **ionCube Loader Installation**
-   Installs and configures the ionCube Loader for PHP.
-
-8. **Nginx Configuration**
-   Configures Nginx with reusable proxy configurations for PHP and Laravel.
-
-9. **MySQL Configuration**
-   Secures MySQL by setting a random root password and enabling remote access.
-
-10. **phpMyAdmin Installation**
-    Installs and configures phpMyAdmin for database management.
-
-11. **Firewall and SSH Configuration**
-    Configures UFW to allow SSH and enables SFTP access.
-
-12. **Memcached Setup**
-    Installs and starts Memcached for caching.
-
-13. **Fail2Ban Configuration**
-    Installs and configures Fail2Ban to protect against brute-force attacks.
-
-14. **Log Rotation**
-    Sets up log rotation for custom logs in `/home/vdsadmin/logs`.
-
-## Usage
-
-1. Clone or copy the script to your server.
-2. Make the script executable:
-   ```bash
-   chmod +x preinstall.sh
-   ```
-
-   or
-
-## Usage for post-install at hosting panel
+### Run post-install configuration:
 ```bash
-   #!/bin/bash
-   wget https://raw.githubusercontent.com/barslg/postinstall/refs/heads/main/devops/postinstall.sh -O /root/postinstall.sh
-   /bin/bash /root/postinstall.sh
+sudo bash postinstall.sh
 ```
+
+or
+
+```bash
+#!/bin/bash
+wget https://raw.githubusercontent.com/barslg/postinstall/refs/heads/main/devops/postinstall.sh -O /root/postinstall.sh
+/bin/bash /root/postinstall.sh
+```
+
+### Add a new domain:
+```bash
+sudo bash addDomain.sh yourdomain.com [laravel]
+```
+
+Example for Laravel:
+```bash
+sudo bash addDomain.sh example.com laravel
+```
+
+## 🧱 Requirements
+
+- Ubuntu 22.04.5 LTS
+- Root or `sudo` privileges
+- Domain with DNS pointing to server's public IP
+- Open ports: 22, 80, 443, 873
+
+## 📁 Directory Structure
+
+```
+/home/vdsadmin/
+├── www/               # Web root for domains
+│   └── example.com/
+├── logs/              # Nginx logs per domain
+├── certs/             # SSL certificates (if not using Certbot)
+├── .ssh/              # SSH access for vdsadmin
+```
+
+## 🛡️ Security and Best Practices
+
+- Uses `set -euo pipefail` for reliable execution
+- Non-interactive APT operations
+- All configurations and logics are auditable
+- Ensures minimal human interaction
+- Auto-detects server specs (RAM, disk, CPU) and configures accordingly
+
+
+---
+
+> Maintained by [Oleksandr](mailto:barsnata@gmail.com) — built with ❤️ in Norway.

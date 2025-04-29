@@ -121,6 +121,8 @@ if [[ "$HTTPS_RESPONSE" != "$TEST_CONTENT" ]]; then
   exit 1
 fi
 log "HTTPS validation successful"
+chown -R vdsadmin:vdsadmin "$WEB_ROOT"
+chmod -R 755 "$WEB_ROOT"
 
 log "Virtual host and SSL setup completed successfully for $DOMAIN"
 exit 0
