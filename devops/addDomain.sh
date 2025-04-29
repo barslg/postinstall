@@ -82,7 +82,7 @@ ln -s "$VHOST_FILE" "$NGINX_ENABLED_DIR/$DOMAIN.conf"
 log "Testing Nginx configuration"
 nginx -t
 log "Reloading Nginx to apply changes"
-systemctl reload nginx
+systemctl restart nginx
 
 # Step 4: Create a unique test file
 log "Creating a test file to validate HTTP access"

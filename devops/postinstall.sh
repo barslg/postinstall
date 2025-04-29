@@ -225,9 +225,7 @@ HTPASSWD_USER="admin"
 HTPASSWD_PASS=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c12)
 echo "Nginx htaccess: $HTPASSWD_USER $HTPASSWD_PASS" >> $ALL_SETTINGS_FILE
 htpasswd -bc /home/vdsadmin/.htpasswd "$HTPASSWD_USER" "$HTPASSWD_PASS"
-chmod 600 /home/vdsadmin/.htpasswd
-
-
+chmod 640 /home/vdsadmin/.htpasswd
 
 
 systemctl enable nginx && systemctl restart nginx
