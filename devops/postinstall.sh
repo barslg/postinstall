@@ -177,18 +177,17 @@ location ~ /.well-known/acme-challenge/ {
   allow all;
 }
 location /myadmin {
+  root /var/www/html;
+  index index.php index.html;
   auth_basic "Restricted";
   auth_basic_user_file /home/vdsadmin/.htpasswd;
-  root /var/www/html/myadmin;
-  index index.php index.html;
 
-location ~ \.php$ {
+  location ~ ^/myadmin/.*\.php$ {
     include snippets/fastcgi-php.conf;
-    fastcgi_pass unix:/run/php/php'$PHP_VERSION'-fpm.sock;
+    fastcgi_pass unix:/run/php/php8.1-fpm.sock;
     fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
   }
 }
-error_page 404 /404.html;
 ' > /etc/nginx/proxy.conf
 
 echo 'include /etc/nginx/proxy.conf;
@@ -203,7 +202,7 @@ location / {
   curl -s -L https://www.cloudflare.com/ips-v4 | awk '{print "set_real_ip_from " $0 ";"}'
   echo -e "\n##### Cloudflare - IPv6\n"
   curl -s -L https://www.cloudflare.com/ips-v6 | awk '{print "set_real_ip_from " $0 ";"}'
-  echo -e "\nreal_ip_header CF-Connecting-IP;"
+  echo -e "\nreal_ip_header CF-Connecting-IP;\n"
 } > "$CLOUDFLARE_FILE_PATH"
 
 # nginx config tuning
@@ -226,6 +225,8 @@ HTPASSWD_PASS=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c12)
 echo "Nginx htaccess: $HTPASSWD_USER $HTPASSWD_PASS" >> $ALL_SETTINGS_FILE
 htpasswd -bc /home/vdsadmin/.htpasswd "$HTPASSWD_USER" "$HTPASSWD_PASS"
 chmod 640 /home/vdsadmin/.htpasswd
+
+sed -i "s|^127.0.1.1|$DEFAULT_IP|" /etc/hosts
 
 
 systemctl enable nginx && systemctl restart nginx
