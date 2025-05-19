@@ -34,6 +34,10 @@ Adds a new domain with Nginx and Let's Encrypt certificate in seconds.
 - Issues SSL via Certbot with HTTP challenge
 - Logs to `/var/log/adddomain.log`
 
+
+### ✅ `install_project.sh`
+Initialization laravel project
+
 ## ⚙️ Usage
 
 ### Run post-install configuration:
